@@ -213,7 +213,7 @@ GROUP BY
 -- LEFT JOIN asegura que se muestren todos los registros ACEPTA
 -- incluso si no tienen correspondencia en base_resultados.
 -- =========================================================
-
+ --- en uso actual
 SELECT 
     u."número_de_identificación" AS numero_documento,
     u.primer_nombre,
@@ -275,7 +275,7 @@ GROUP BY
 --   - Solo responsables con valor NO nulo y NO vacío
 --   - Solo criterios con valor NO nulo y NO vacío (todos los criterios válidos)
 -- =========================================================
-
+ --- en uso actual
 SELECT 
     TRIM(g.responsable) AS responsable,
     -- Totales por tipo de criterio
