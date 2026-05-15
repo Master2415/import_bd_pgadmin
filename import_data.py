@@ -13,7 +13,7 @@ DB_USER = "root"
 DB_PASS = "ROOT"
 DB_HOST = "localhost"
 DB_PORT = "5432"
-DB_NAME = "cruceunidades_2025"
+DB_NAME = "crucesunidades"
 
 def log(msg):
     """

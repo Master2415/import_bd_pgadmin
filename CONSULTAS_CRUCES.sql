@@ -301,3 +301,160 @@ WHERE g.responsable IS NOT NULL
 GROUP BY TRIM(g.responsable)
 ORDER BY total_general DESC;
 
+****************************
+-- =========================================================
+-- REPORTE COMPLETO DE ACEPTADOS CON DATOS CLÍNICOS Y PBX
+-- (SOLO LA LLAMADA DE MAYOR DURACIÓN POR TELÉFONO)
+-- =========================================================
+-- TABLAS:
+--   - grupo_1_60cols_2026_unificado (g)
+--   - unidades (u)
+--   - base_resultados (br)
+--   - hist_pbx (hp)
+--
+-- Para cada teléfono, se trae ÚNICAMENTE la llamada
+-- con mayor duración (evita duplicados por múltiples llamadas)
+-- =========================================================
+
+SELECT 
+    u."número_de_identificación" AS numero_documento,
+    u.primer_nombre,
+    u.primer_apellido,
+    u.segundo_apellido,
+    u."edad" AS edad,
+    u.sexo,
+    u.departamento,
+    u.municipio,
+    u.eps,
+    u.auditoria_de_servicios,
+    g.fecha,
+    u."fecha_de_registro-ingreso_de_la_información_dd/mm/aaaa",
+    STRING_AGG(DISTINCT g.responsable, ' | ') AS responsables,
+    br.tipo_de_examen,
+    br.clasificacion_clinica_del_resultado,
+    br.detalles_del_resultado,
+    
+    -- Datos PBX (usando ROW_NUMBER como en la primera consulta)
+    hp.numero_telefono,
+    hp.fecha AS fecha_llamada,
+    hp.duracion_llamada,
+    hp.answer
+
+FROM grupo_1_60cols_2026_unificado g
+INNER JOIN unidades u
+    ON g.nro_identificacion = u."número_de_identificación"::text
+LEFT JOIN base_resultados br
+    ON g.nro_identificacion = br.identificacion::text
+LEFT JOIN (
+    SELECT 
+        numero_telefono,
+        fecha,
+        duracion_llamada,
+        answer,
+        ROW_NUMBER() OVER (
+            PARTITION BY numero_telefono 
+            ORDER BY duracion_llamada DESC
+        ) AS rn
+    FROM hist_pbx
+    WHERE duracion_llamada IS NOT NULL
+) hp ON g.telefono_mas_usado = hp.numero_telefono AND hp.rn = 1
+
+WHERE UPPER(TRIM(g.criterios)) = 'ACEPTA'
+GROUP BY 
+    u."número_de_identificación",
+    u.primer_nombre,
+    u.primer_apellido,
+    u.segundo_apellido,
+    u."edad",
+    u.sexo,
+    u.departamento,
+    u.municipio,
+    u.eps,
+    u.auditoria_de_servicios,
+    g.fecha,
+    u."fecha_de_registro-ingreso_de_la_información_dd/mm/aaaa",
+    br.tipo_de_examen,
+    br.clasificacion_clinica_del_resultado,
+    br.detalles_del_resultado,
+    hp.numero_telefono,
+    hp.fecha,
+    hp.duracion_llamada,
+    hp.answer;
+
+
+    ************************
+
+
+    ***************
+
+
+SELECT 
+    -- Nombre del archivo de origen
+    TRIM(g.archivo_origen) AS archivo_origen,
+
+    -- Responsable
+    TRIM(g.responsable) AS responsable,
+
+    -- REGISTROS ENCONTRADOS EN UNIDADES
+    COUNT(DISTINCT CASE
+        WHEN u."número_de_identificación" IS NOT NULL
+        THEN g.nro_identificacion
+    END) AS registros_en_unidades,
+
+    -- TOTAL_LLAMADAS: Todo excepto NULL, vacío y 'NO APLICA'
+    COUNT(DISTINCT CASE 
+        WHEN UPPER(TRIM(g.criterios)) IS NOT NULL
+         AND UPPER(TRIM(g.criterios)) <> ''
+         AND UPPER(TRIM(g.criterios)) <> 'NO APLICA'
+        THEN g.nro_identificacion
+    END) AS total_llamadas,
+    
+    -- LLAMADAS_NO_REALIZADAS:
+    -- Todo excepto NULL, vacío, 'NO APLICA', 'ACEPTA' y 'NO ACEPTA'
+    COUNT(DISTINCT CASE 
+        WHEN UPPER(TRIM(g.criterios)) IS NOT NULL
+         AND UPPER(TRIM(g.criterios)) <> ''
+         AND UPPER(TRIM(g.criterios)) <> 'NO APLICA'
+         AND UPPER(TRIM(g.criterios)) NOT IN ('ACEPTA', 'NO ACEPTA')
+        THEN g.nro_identificacion
+    END) AS llamadas_no_realizadas,
+    
+    -- LLAMADAS_CONTESTADAS:
+    -- Todo excepto NULL, vacío, 'NO CONTESTA' y 'NO APLICA'
+    COUNT(DISTINCT CASE 
+        WHEN UPPER(TRIM(g.criterios)) IS NOT NULL
+         AND UPPER(TRIM(g.criterios)) <> ''
+         AND UPPER(TRIM(g.criterios)) NOT IN ('NO CONTESTA', 'NO APLICA')
+        THEN g.nro_identificacion
+    END) AS llamadas_contestadas,
+    
+    -- NO_ACEPTARON: Solo 'NO ACEPTA'
+    COUNT(DISTINCT CASE 
+        WHEN UPPER(TRIM(g.criterios)) = 'NO ACEPTA'
+        THEN g.nro_identificacion
+    END) AS no_aceptaron,
+    
+    -- ACEPTADAS: Solo 'ACEPTA'
+    COUNT(DISTINCT CASE 
+        WHEN UPPER(TRIM(g.criterios)) = 'ACEPTA'
+        THEN g.nro_identificacion
+    END) AS aceptadas
+
+FROM grupo_1_60cols_2026_unificado g
+LEFT JOIN unidades u
+    ON TRIM(g.nro_identificacion) = TRIM(u."número_de_identificación"::text)
+
+WHERE g.responsable IS NOT NULL
+  AND TRIM(g.responsable) <> ''
+  AND g.archivo_origen IS NOT NULL
+  AND TRIM(g.archivo_origen) <> ''
+  AND g.criterios IS NOT NULL
+  AND TRIM(g.criterios) <> ''
+
+GROUP BY 
+    TRIM(g.archivo_origen),
+    TRIM(g.responsable)
+
+ORDER BY 
+    archivo_origen,
+    total_llamadas DESC;
